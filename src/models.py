@@ -7,7 +7,7 @@ from .database import Base
 
 class User(Base):
     __tablename__ = 'users'
-    id = Column(Integer, primary_key=True)
+    id = Column(Integer, primary_key=True,unique=True)
     username = Column(String)
     email = Column(String, unique=True) #значения не могут повторяться
     hashed_password = Column(String)
@@ -15,14 +15,15 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     chat = relationship('Chat', secondary='party', back_populates='user')
-
+    message = relationship('Message', back_populates='user')
 
 class Chat(Base):
     __tablename__ = 'chats'
-    chat_id = Column(Integer, primary_key=True)
+    chat_id = Column(Integer, primary_key=True, unique=True)
     chat_name = Column(String)
-
-    user = relationship('User',secondary='party', back_populates='chat' ) #пользователь, создавший чат
+    user_id = Column(Integer, ForeignKey('users.id')) #пользователь, создавший чат
+    user = relationship('User',secondary='party', back_populates='chat' )
+    message = relationship('Message', back_populates='chat')
 
 
 

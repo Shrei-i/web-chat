@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class Chat(BaseModel):
     chat_id: int
     chat_name: str
+    user_id: int
 
     class Config:
         orm_mode = True
@@ -23,13 +24,13 @@ class Message(BaseModel):
 
 class UserBase(BaseModel):
     email: str
+    username: str
 
 class UserCreate(UserBase):
     password: str
 
 class User(UserBase):
     id: int
-    username: str
     is_active: bool
     created_at: datetime
     chats: list[Chat] = []
