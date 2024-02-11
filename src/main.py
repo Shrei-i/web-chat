@@ -1,8 +1,8 @@
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy.orm import Session
 from src import crud, models, schemas
 from src.database import SessionLocal, engine
-from fastapi.responses import HTMLResponse
+
 
 models.Base.metadata.create_all(bind=engine)
 
@@ -16,7 +16,7 @@ def get_db():
     finally:
         db.close()
 
-@app.post('/users/', response_model=schemas.User)
+@app.post('/users/', response_model=schemas.User) #создание пользователя
 def create_user(user:schemas.UserCreate, db:Session = Depends(get_db)):
     db_user = crud.get_user(db, id=user.id)
     if db_user:
@@ -24,22 +24,22 @@ def create_user(user:schemas.UserCreate, db:Session = Depends(get_db)):
     else:
         return crud.create_user(db, user)
 
-@app.post('/chats/', response_model=schemas.Chat)
+@app.post('/chats/', response_model=schemas.Chat) #создание чата
 def create_chat(chat:schemas.Chat, db:Session = Depends(get_db)):
-    db_chat = crud.get_chat(db, id=chat.chat_id)
+    db_chat = crud.get_chat(db, chat_id=chat.chat_id)
     if db_chat:
         raise HTTPException(400, 'Чат с таким id существует, придумайте другой')
     else:
         return crud.create_chat(db, chat)
-@app.post('/chats/{chat_id}/{user_id}/message', response_model=schemas.Message)
+@app.post('/chats/{chat_id}/{user_id}/message') #отправка сообщения пользователя в конкретный чат
 def send_message(chat_id: int, user_id: int, text:str, db:Session = Depends(get_db)):
-    in_party = crud.get_party(db,chat_id,user_id)
-    if in_party:
+    party = crud.get_party_chat(db, chat_id)
+    if user_id in [i.user_id for i in party]:
         return crud.new_message(db, user_id, chat_id, text)
     else:
         raise HTTPException(400, 'Отказано в доступе')
 
-@app.get("/users/{user_id}", response_model=schemas.User)
+@app.get("/users/{user_id}", response_model=schemas.User) #поиск пользователя по id
 def read_user(user_id:int, db:Session = Depends(get_db)):
     db_user = crud.get_user(db, id = user_id)
     if db_user:
@@ -47,82 +47,52 @@ def read_user(user_id:int, db:Session = Depends(get_db)):
     else:
         raise HTTPException(404, 'Пользователь не найден')
 
+@app.get("/chats/{chat_id}", response_model=schemas.Chat) #поиск чата по id
+def read_chat(chat_id:int, db: Session = Depends(get_db)):
+    db_chat = crud.get_chat(db, chat_id)
+    if db_chat:
+        return db_chat
+    else:
+        raise HTTPException(404, 'Чат не найден')
+
+@app.get("/users/find/{username}", response_model=list[schemas.User]) #поиск пользователей по никнеймам
+def get_username(username:str, db: Session = Depends(get_db)):
+    users = crud.get_username(db, username)
+    if users:
+        return users
+    else:
+        raise HTTPException(404, 'Ни одного пользователя не найдео')
+
+@app.get("/chat_users/{chat_id}", response_model=[]) #показывает пользователей состоящих в данном чате
+def get_chat_users(chat_id:int, db:Session = Depends(get_db)):
+    party = crud.get_party_chat(db, chat_id)
+    return [i.user_id for i in party]
+    # else:
+    #     raise HTTPException(404, 'Ни одного пользователя не найдео')
+
+
+@app.get("/user_chats/{user_id}", response_model=[]) #показывает список чатов в которых состоит конкретный пользователь
+def get_party(user_id:int, db:Session = Depends(get_db)):
+    party = crud.get_party_user(db, user_id)
+    return [i.chat_id for i in party]
+
+@app.get("/chats/{chat_id}/messages", response_model=list[schemas.MessageBase])
+def get_messages(chat_id:int, db:Session = Depends(get_db)):
+    messages = crud.get_messages(db, chat_id)
+    return messages
+
+
+@app.put("/user/update/{user_id}", response_model=schemas.User) #обновление имени и пароля пользователя
+def update_user(user_id:int, new_username:str = None, new_password:str = None, db:Session = Depends(get_db)):
+    return crud.update_user(db, user_id, new_username, new_password)
 
 
 
+@app.put("/chats/add_user/{chat_id}", response_model=schemas.Party)
+def update_chat(user_id: int, chat_id:int, db:Session = Depends(get_db)):
+    return crud.update_chat(db, chat_id, user_id)
 
 
-
-
-# html = """
-# <!DOCTYPE html>
-# <html>
-#     <head>
-#         <title>Chat</title>
-#     </head>
-#     <body>
-#         <h1>WebSocket Chat</h1>
-#         <h2>Your ID: <span id="ws-id"></span></h2>
-#         <form action="" onsubmit="sendMessage(event)">
-#             <input type="text" id="messageText" autocomplete="off"/>
-#             <button>Send</button>
-#         </form>
-#         <ul id='messages'>
-#         </ul>
-#         <script>
-#             var client_id = Date.now()
-#             document.querySelector("#ws-id").textContent = client_id;
-#             var ws = new WebSocket(`ws://localhost:8000/ws/${client_id}`);
-#             ws.onmessage = function(event) {
-#                 var messages = document.getElementById('messages')
-#                 var message = document.createElement('li')
-#                 var content = document.createTextNode(event.data)
-#                 message.appendChild(content)
-#                 messages.appendChild(message)
-#             };
-#             function sendMessage(event) {
-#                 var input = document.getElementById("messageText")
-#                 ws.send(input.value)
-#                 input.value = ''
-#                 event.preventDefault()
-#             }
-#         </script>
-#     </body>
-# </html>
-# """
-#
-# class ConnectionManager:
-#     def __init__(self):
-#         self.active_connections: list[WebSocket] = []
-#
-#     async def connect(self, websocket: WebSocket):
-#         await websocket.accept()
-#         self.active_connections.append(websocket)
-#
-#     def disconnect(self, websocket: WebSocket):
-#         self.active_connections.remove(websocket)
-#
-#
-#     async def broadcast(self, message: str):
-#         for connection in self.active_connections:
-#             await connection.send_text(message)
-#
-#
-# manager = ConnectionManager()
-#
-#
-# @app.get("/")
-# async def get():
-#     return HTMLResponse(html)
-#
-#
-# @app.websocket("/ws/{client_id}")
-# async def websocket_endpoint(websocket: WebSocket, client_id: int):
-#     await manager.connect(websocket)
-#     try:
-#         while True:
-#             data = await websocket.receive_text()
-#             await manager.broadcast(f"Client #{client_id} says: {data}")
-#     except WebSocketDisconnect:
-#         manager.disconnect(websocket)
-#         await manager.broadcast(f"Client #{client_id} left the chat")
+@app.delete("/user/del/{user_id}")
+def delete_user(user_id:int, db:Session = Depends(get_db)):
+    return crud.delete_user(db, user_id)
